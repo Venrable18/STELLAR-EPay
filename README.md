@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Stellar-EncryptedPay
 
 > **Privacy-first payment protocol built on Soroban — confidential transfers, encrypted streaming, and private payment channels on Stellar.**
@@ -1156,3 +1157,12 @@ MIT — see [LICENSE](LICENSE)
 
 > Built on Stellar Protocol 25 (X-Ray). Inspired by Avalanche eERC and Stellar Private Payments (SPP).
 > Leverages open-source work from the Stellar Development Foundation, iden3/circom, and the Nethermind ZK team.
+=======
+
+# STELLAR-EPay
+
+
+
+
+#Project Documentation: https://docs.google.com/document/d/1PteAHLLHQlN499KjNcEHlvT6i8t1ziKS/edit?usp=sharing&ouid=105697343927857090340&rtpof=true&sd=true
+>>>>>>> 3e09a22b6dce54a310bfd9aacd3c3364e033797c
