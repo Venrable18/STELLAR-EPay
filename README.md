@@ -32,6 +32,7 @@ Project documentation: [Google Doc](https://docs.google.com/document/d/1PteAHLLH
 - [Testing Strategy](#testing-strategy)
 - [Deployment Plan](#deployment-plan)
 - [Future Roadmap](#future-roadmap)
+  - [Future version integration](#future-version-integration)
 - [Contributing](#contributing)
 
 ---
@@ -671,6 +672,49 @@ Testnet is the first public proving ground for the protocol. Mainnet should not 
 ## Future Roadmap
 
 The roadmap is intentionally phased by dependency and risk. Everything below **after `v1.0`** is a planned direction, not a commitment or shipping order until each phase is specified in `docs/protocol` and backed by tests.
+
+### Future version integration
+
+Later versions are designed to **extend** the same foundation (`pool_contract` + `groth16_verifier`) instead of replacing it. New contracts and circuits plug in when their phase ships; dashed edges mean optional or configuration-dependent wiring.
+
+**Phased delivery (depends on the previous phase being stable):**
+
+```mermaid
+flowchart LR
+  v10["v1.0<br/>Core pool"]
+  v11["v1.1<br/>UX + memos"]
+  v12["v1.2<br/>Policy + assets"]
+  v20["v2.0<br/>Streams"]
+  v21["v2.1<br/>Channels"]
+  v30["Future<br/>Research"]
+
+  v10 --> v11 --> v12 --> v20 --> v21 --> v30
+```
+
+**How future modules integrate with the core stack:**
+
+```mermaid
+flowchart TB
+  subgraph Core["v1.0 always"]
+    POOL[pool_contract]
+    VER[groth16_verifier]
+    POOL --> VER
+  end
+
+  MEMO["memo_vault<br/>v1.1+ optional"]
+  ASP["asp_registry<br/>v1.2+ optional"]
+  STR["stream_manager<br/>v2.0+"]
+  CH["channel_manager<br/>v2.1+"]
+
+  MEMO -.->|encrypted memo payload| POOL
+  ASP -.->|membership / policy| POOL
+
+  STR -->|verify proofs| VER
+  STR -->|lock / claim / settle| POOL
+
+  CH -->|verify proofs| VER
+  CH -->|open / close / dispute| POOL
+```
 
 ### `v1.0` Core private pool (current focus)
 
