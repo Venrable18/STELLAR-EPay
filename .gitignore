@@ -1,0 +1,29 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# Node
+node_modules/
+dist/
+sdk/dist/
+frontend/dist/
+*.tsbuildinfo
+.npm/
+
+# Env
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# ZK / circuit build outputs (when present)
+circuits/build/
+circuits/**/*.wtns
+circuits/**/*.r1cs
+circuits/**/*.zkey
+circuits/**/*.wasm
+circuits/**/*.sym

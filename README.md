@@ -1,1155 +1,789 @@
-
 # Stellar-EncryptedPay
 
-> **Privacy-first payment protocol built on Soroban — confidential transfers, encrypted streaming, and private payment channels on Stellar.**
+> Privacy-preserving payments on Stellar, built around a focused Soroban MVP: `deposit -> private transfer -> withdraw`.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Stellar Protocol](https://img.shields.io/badge/Stellar-Protocol%2025%20(X--Ray)-0F6E56)](https://stellar.org/blog/developers/announcing-stellar-x-ray-protocol-25)
 [![Soroban](https://img.shields.io/badge/Soroban-Smart%20Contracts-1A3C5E)](https://soroban.stellar.org)
 [![ZK Stack](https://img.shields.io/badge/ZK-Groth16%20%2F%20BN254-7F77DD)](https://docs.circom.io)
-[![Status](https://img.shields.io/badge/Status-Active%20Development-orange)](https://github.com)
+[![Status](https://img.shields.io/badge/Status-Architecture%20Realignment-orange)](https://github.com)
 
 ---
 
-#Project Documentation: https://docs.google.com/document/d/1PteAHLLHQlN499KjNcEHlvT6i8t1ziKS/edit?usp=sharing&ouid=105697343927857090340&rtpof=true&sd=true
+Project documentation: [Google Doc](https://docs.google.com/document/d/1PteAHLLHQlN499KjNcEHlvT6i8t1ziKS/edit?usp=sharing&ouid=105697343927857090340&rtpof=true&sd=true)
 
 ---
 
 ## Table of Contents
 
 - [Overview](#overview)
-- [How It Works](#how-it-works)
-- [System Architecture](#system-architecture)
-- [Project Scaffold](#project-scaffold)
-- [Smart Contract Architecture](#smart-contract-architecture)
-- [ZK Circuit Design](#zk-circuit-design)
-- [Transaction Flows](#transaction-flows)
-- [Private Payment Channels](#private-payment-channels)
-- [Private Streaming Payments](#private-streaming-payments)
-- [Dependencies](#dependencies)
-- [Environment Setup](#environment-setup)
-- [Installation](#installation)
-- [Running the Project](#running-the-project)
-- [Testing](#testing)
-- [Deployment](#deployment)
-- [SDK Usage](#sdk-usage)
-- [Feature Roadmap](#feature-roadmap)
+- [Current Project Status](#current-project-status)
+- [Why This Project Exists](#why-this-project-exists)
+- [MVP Scope](#mvp-scope)
+- [Out of Scope for v1.0](#out-of-scope-for-v10)
+- [How the MVP Works](#how-the-mvp-works)
+- [Privacy Model](#privacy-model)
+- [MVP Architecture](#mvp-architecture)
+- [Contracts](#contracts)
+- [ZK Circuits](#zk-circuits)
+- [SDK Surface](#sdk-surface)
+- [Target Repository Structure](#target-repository-structure)
+- [Build Plan](#build-plan)
+- [Testing Strategy](#testing-strategy)
+- [Deployment Plan](#deployment-plan)
+- [Future Roadmap](#future-roadmap)
 - [Contributing](#contributing)
 
 ---
 
 ## Overview
 
-Stellar-EncryptedPay is a zero-knowledge privacy protocol on Stellar's Soroban platform. It lets any person or business send, receive, and stream private payments — where amounts, balances, and metadata remain completely hidden on-chain — while maintaining selective compliance auditability for regulators.
+`Stellar-EncryptedPay` is a privacy-focused payments protocol for Stellar. The core idea is simple:
 
-It is directly inspired by Avalanche's eERC standard but purpose-built for Stellar's architecture, leveraging the **Protocol 25 (X-Ray)** upgrade which introduced native **BN254** elliptic curve operations and **Poseidon** hashing to Soroban in January 2026.
+1. a user deposits a public Stellar asset into a Soroban pool
+2. inside the pool, value is represented as private commitments instead of public balances
+3. transfers happen with zero-knowledge proofs
+4. the recipient can later withdraw back to a public asset
 
-### What makes it unique
+The long-term vision includes richer privacy features such as encrypted memos, selective disclosure, recurring payments, and possibly private streaming or channels. However, this repository is now aligned around a much tighter and safer objective:
 
-| Feature | Description | First anywhere? |
-|---|---|---|
-| Private transfers | ZK-proof-validated transfers with hidden amounts | No (eERC on Avalanche exists) |
-| **Encrypted memos** | Encrypted invoice/note attached to every payment | **Yes** |
-| **Private streaming** | Per-second salary/subscription streams, amounts hidden | **Yes** |
-| **Private payment channels** | Off-chain bilateral channels with ZK state transitions | **Yes** |
-| Stealth addresses | One-time addresses per payment, unlinked to recipient | No (exists on Ethereum) |
-| Selective disclosure | Prove "paid > $X" without revealing exact amount | Beyond Avalanche eERC |
-| SEP-41 converter | Wrap any Stellar token into private form and back | Yes on Stellar |
+**build a correct, testable, single-asset private pool first.**
 
 ---
 
-## How It Works
+## Current Project Status
 
-At a high level, Stellar-EncryptedPay works like a shielded pool:
+This repository is currently documentation-first. The immediate goal is to turn the protocol idea into a credible implementation plan before expanding into advanced features.
 
-1. A user **deposits** a public SEP-41 token into the pool contract — their balance becomes an encrypted commitment on-chain
-2. They can **transfer** privately by generating a zero-knowledge proof off-chain (client-side via WASM) that validates the transaction without revealing amounts
-3. The Soroban verifier contract checks the proof using BN254 host functions — if valid, commitments update
-4. The recipient can **withdraw** at any time by proving ownership of their commitment
+This README intentionally separates:
 
-```
-Public token  ──deposit──►  Encrypted pool  ──transfer──►  Encrypted pool  ──withdraw──►  Public token
-               (wrap)        [commitment]     (ZK proof)     [commitment]     (ZK proof)    (unwrap)
-```
-
-Nobody watching the chain can see: how much was deposited, how much was transferred, who sent to whom, or what the current balance is.
+- what the project is trying to become
+- what the `v1.0` MVP must actually ship
+- what should wait until the protocol core is proven
 
 ---
 
-## System Architecture
+## Why This Project Exists
 
-### Full stack overview
+Stellar is excellent for fast, low-cost payments, but standard transfers expose too much information for many real-world use cases.
+
+Examples:
+
+- payroll where salary amounts should not be public
+- B2B invoice settlement where transfer metadata should not be public
+- treasury and vendor flows where balances and payment links should be harder to analyze
+
+The goal of `Stellar-EncryptedPay` is to add a privacy layer on top of Stellar without giving up Soroban programmability or the ability to enter and exit through normal assets.
+
+---
+
+## MVP Scope
+
+`v1.0` is intentionally narrow.
+
+### The MVP must include
+
+- one private pool
+- one asset per deployed pool
+- one verifier contract
+- three user actions:
+  - `deposit`
+  - `private transfer`
+  - `withdraw`
+- a TypeScript SDK for proof generation and transaction submission
+- a minimal frontend with only the above flows
+- contract, circuit, and end-to-end tests
+
+### The MVP success criteria
+
+- a user can deposit a public asset into the pool
+- a user can transfer a note privately to another user
+- the recipient can withdraw successfully
+- double spending is prevented with nullifiers
+- invalid proofs are rejected on-chain
+- the full flow can be reproduced locally and on testnet
+
+---
+
+## Out of Scope for v1.0
+
+These features are valuable, but they should not be part of the first shipping milestone:
+
+- private payment channels
+- private streaming payments
+- stealth addresses
+- selective disclosure and compliance overlays
+- encrypted memo storage
+- multi-asset shared pools
+- cross-chain features
+- payroll or vertical-specific products
+
+Reason: each of these adds meaningful complexity in protocol design, metadata privacy, state management, and security review. They should be layered on only after the pool model is correct.
+
+---
+
+## How the MVP Works
+
+At a high level, the MVP behaves like a shielded pool:
+
+```text
+Public asset --deposit--> pool note --private transfer--> pool note --withdraw--> public asset
+```
+
+### Flow
+
+1. The sender deposits a public Stellar asset into the pool contract.
+2. The SDK derives a private note commitment for the depositor.
+3. For a transfer, the sender generates a zero-knowledge proof off-chain.
+4. The pool contract verifies the proof via the verifier contract.
+5. The input note is nullified and a new output note is inserted.
+6. The recipient later proves ownership and withdraws publicly.
+
+### Important privacy boundary
+
+For `v1.0`, deposits and withdrawals are public on-chain actions.
+
+That means:
+
+- pool-in amount is visible at deposit time
+- pool-out amount is visible at withdrawal time
+- internal pool transfers are where privacy is strongest
+
+This is a more honest and safer framing than claiming total end-to-end invisibility from day one.
+
+---
+
+## Privacy Model
+
+The protocol aims to hide or reduce visibility of the following during private transfers:
+
+- transfer amount inside the pool
+- sender/recipient link inside the pool
+- current spendable note ownership
+
+The protocol does **not** promise to hide everything in `v1.0`.
+
+### Visible in v1.0
+
+- deposit transactions
+- withdrawal transactions
+- contract interactions
+- timing patterns
+- note insertion cadence
+
+### Reduced or hidden in v1.0
+
+- internal transfer amount
+- note ownership proof inputs
+- the exact relationship between input and output notes, subject to metadata leakage limits
+
+### Threat-model note
+
+This project needs a formal threat model before mainnet. In particular, it must define what is hidden from:
+
+- a chain observer
+- a malicious sender
+- a malicious recipient
+- a relayer or indexer
+- an auditor or regulated counterparty
+
+---
+
+## MVP Architecture
+
+The MVP architecture uses only four moving parts:
 
 ```mermaid
 graph TB
-    subgraph Client["Client Layer (Browser / Mobile)"]
-        UI[React dApp]
+    subgraph Client["Client"]
+        UI[Minimal React frontend]
         SDK[TypeScript SDK]
-        WASM[Circom WASM Prover]
+        WASM[WASM prover]
     end
 
-    subgraph Contracts["Soroban Smart Contracts (Rust)"]
+    subgraph Contracts["Soroban contracts"]
         POOL[pool_contract]
         VERIFIER[groth16_verifier]
-        ASP[asp_registry]
-        STREAM[stream_manager]
-        MEMO[memo_vault]
-        CHANNEL[channel_manager]
     end
 
-    subgraph ZKToolchain["ZK Toolchain (Off-chain)"]
-        CIRCOM[Circom Circuits]
+    subgraph ZK["ZK toolchain"]
+        CIRCOM[Circom circuits]
         SNARK[SnarkJS]
-        C2S[circom2soroban]
     end
 
-    subgraph StellarNetwork["Stellar Network (Protocol 25)"]
-        BN254[BN254 Host Functions]
-        POSEIDON[Poseidon Hash]
-        SEP41[SEP-41 Token Interface]
-        LEDGER[Stellar Ledger]
+    subgraph Stellar["Stellar"]
+        TOKEN[SEP-41 token]
+        LEDGER[Ledger]
+        BN254[BN254 host functions]
     end
 
     UI --> SDK
     SDK --> WASM
     WASM --> CIRCOM
-    SDK --> POOL
-    SDK --> STREAM
-    SDK --> CHANNEL
-
-    POOL --> VERIFIER
-    POOL --> ASP
-    POOL --> MEMO
-    STREAM --> VERIFIER
-    CHANNEL --> VERIFIER
-
-    VERIFIER --> BN254
-    POOL --> POSEIDON
-    POOL --> SEP41
-    SEP41 --> LEDGER
-
     CIRCOM --> SNARK
-    SNARK --> C2S
-    C2S --> VERIFIER
+    SDK --> POOL
+    POOL --> VERIFIER
+    VERIFIER --> BN254
+    POOL --> TOKEN
+    TOKEN --> LEDGER
 ```
 
-### Layer responsibilities
+### Design principles
 
-```mermaid
-graph LR
-    subgraph L1["Layer 1 — User"]
-        A1[Web browser]
-        A2[Mobile wallet]
-    end
-
-    subgraph L2["Layer 2 — SDK"]
-        B1[Key generation]
-        B2[Proof generation]
-        B3[Tx construction]
-        B4[Balance decryption]
-    end
-
-    subgraph L3["Layer 3 — Contracts"]
-        C1[Pool logic]
-        C2[ZK verification]
-        C3[Compliance / ASP]
-    end
-
-    subgraph L4["Layer 4 — Cryptography"]
-        D1[Groth16 zk-SNARKs]
-        D2[ElGamal encryption]
-        D3[BabyJubJub curve]
-        D4[Poseidon hash]
-    end
-
-    subgraph L5["Layer 5 — Stellar"]
-        E1[BN254 host fns]
-        E2[Fast finality 5s]
-        E3[Sub-cent fees]
-    end
-
-    L1 --> L2 --> L3 --> L4 --> L5
-```
+- keep the protocol core small
+- keep verification logic separate from pool accounting
+- use one note model in `v1.0`
+- use one asset per pool
+- add optional features only after tests and sync logic are stable
 
 ---
 
-## Project Scaffold
+## Contracts
 
-```
-stellar-encrypted-pay/
-│
-├── contracts/                          # Soroban smart contracts (Rust)
-│   ├── pool_contract/
-│   │   ├── Cargo.toml
-│   │   └── src/
-│   │       ├── lib.rs                  # Contract entry point
-│   │       ├── deposit.rs              # Deposit instruction handler
-│   │       ├── transfer.rs             # Private transfer handler
-│   │       ├── withdraw.rs             # Withdrawal handler
-│   │       ├── commitment.rs           # Commitment tree management
-│   │       └── types.rs                # Shared types and structs
-│   │
-│   ├── groth16_verifier/
-│   │   ├── Cargo.toml
-│   │   └── src/
-│   │       ├── lib.rs                  # Verifier contract entry point
-│   │       ├── verifier.rs             # BN254 proof verification logic
-│   │       └── vk.rs                   # Embedded verification keys
-│   │
-│   ├── asp_registry/
-│   │   ├── Cargo.toml
-│   │   └── src/
-│   │       ├── lib.rs                  # ASP contract entry point
-│   │       ├── membership.rs           # Membership Merkle tree
-│   │       └── exclusion.rs            # Exclusion / blocklist management
-│   │
-│   ├── stream_manager/
-│   │   ├── Cargo.toml
-│   │   └── src/
-│   │       ├── lib.rs                  # Streaming contract entry point
-│   │       ├── stream.rs               # Stream open/close/withdraw
-│   │       └── rate.rs                 # Rate commitment and time logic
-│   │
-│   ├── memo_vault/
-│   │   ├── Cargo.toml
-│   │   └── src/
-│   │       ├── lib.rs                  # Memo vault entry point
-│   │       └── memo.rs                 # Encrypted memo storage and retrieval
-│   │
-│   └── channel_manager/
-│       ├── Cargo.toml
-│       └── src/
-│           ├── lib.rs                  # Payment channel entry point
-│           ├── channel.rs              # Channel open/close/dispute
-│           └── state.rs                # Off-chain state transition types
-│
-├── circuits/                           # Circom ZK circuits
-│   ├── transfer/
-│   │   ├── transfer.circom             # Main transfer validity circuit
-│   │   ├── balance_check.circom        # Sender balance >= amount
-│   │   └── double_spend.circom         # Nullifier uniqueness check
-│   │
-│   ├── deposit/
-│   │   └── deposit.circom              # Deposit commitment circuit
-│   │
-│   ├── withdraw/
-│   │   └── withdraw.circom             # Withdrawal ownership circuit
-│   │
-│   ├── stream/
-│   │   ├── stream_open.circom          # Stream creation circuit
-│   │   └── stream_claim.circom         # Vested amount claim circuit
-│   │
-│   ├── channel/
-│   │   ├── channel_open.circom         # Channel opening commitment
-│   │   └── channel_update.circom       # Off-chain state transition proof
-│   │
-│   └── lib/
-│       ├── merkle.circom               # Merkle inclusion proof
-│       ├── poseidon.circom             # Poseidon hash gadget
-│       └── babyjubjub.circom           # BabyJubJub key operations
-│
-├── sdk/                                # TypeScript client SDK
-│   ├── src/
-│   │   ├── index.ts                    # SDK public API
-│   │   ├── keys/
-│   │   │   ├── keygen.ts               # BabyJubJub key generation
-│   │   │   └── register.ts             # On-chain key registration
-│   │   ├── proofs/
-│   │   │   ├── prover.ts               # WASM proof generation wrapper
-│   │   │   ├── transfer.ts             # Transfer proof builder
-│   │   │   ├── stream.ts               # Stream proof builder
-│   │   │   └── channel.ts              # Channel state proof builder
-│   │   ├── transactions/
-│   │   │   ├── deposit.ts              # Deposit tx constructor
-│   │   │   ├── transfer.ts             # Transfer tx constructor
-│   │   │   ├── withdraw.ts             # Withdraw tx constructor
-│   │   │   └── stream.ts               # Stream tx constructors
-│   │   ├── balance/
-│   │   │   ├── decrypt.ts              # Balance decryption
-│   │   │   └── sync.ts                 # Balance state sync from chain
-│   │   ├── memo/
-│   │   │   ├── encrypt.ts              # Memo encryption
-│   │   │   └── decrypt.ts              # Memo decryption
-│   │   └── compliance/
-│   │       ├── selective_disclosure.ts # Selective disclosure proof gen
-│   │       └── audit_export.ts         # Auditor key management
-│   │
-│   ├── wasm/                           # Compiled Circom WASM artifacts
-│   │   ├── transfer_js/
-│   │   ├── stream_js/
-│   │   └── channel_js/
-│   │
-│   ├── package.json
-│   └── tsconfig.json
-│
-├── frontend/                           # React dApp (Vite)
-│   ├── src/
-│   │   ├── App.tsx
-│   │   ├── pages/
-│   │   │   ├── Send.tsx
-│   │   │   ├── Stream.tsx
-│   │   │   ├── Channel.tsx
-│   │   │   └── History.tsx
-│   │   ├── components/
-│   │   └── hooks/
-│   ├── package.json
-│   └── vite.config.ts
-│
-├── scripts/                            # Build and deployment scripts
-│   ├── setup/
-│   │   ├── trusted_setup.sh            # Powers-of-Tau ceremony
-│   │   └── compile_circuits.sh         # Compile all Circom circuits
-│   ├── deploy/
-│   │   ├── deploy_testnet.sh           # Testnet deployment
-│   │   └── deploy_mainnet.sh           # Mainnet deployment
-│   └── generate_verifiers.sh           # Run circom2soroban on all circuits
-│
-├── tests/
-│   ├── contracts/                      # Soroban contract unit tests
-│   ├── circuits/                       # Circuit constraint tests
-│   └── integration/                    # End-to-end flow tests
-│
-├── Cargo.toml                          # Workspace Cargo manifest
-├── Cargo.lock
-├── package.json                        # Root package manifest
-├── .env.example                        # Environment variable template
-└── README.md
-```
+The MVP should ship only two contracts.
+
+### `pool_contract`
+
+Purpose:
+
+- hold pool state
+- store note commitments
+- track spent nullifiers
+- handle deposits, transfers, and withdrawals
+
+Responsibilities:
+
+- accept the configured public asset
+- add commitments to the Merkle tree
+- reject already-spent nullifiers
+- call the verifier contract
+- release funds on valid withdrawal
+
+Suggested methods:
+
+- `init(token_id, verifier_id, tree_depth)`
+- `deposit(recipient_pubkey, amount, salt, commitment)`
+- `transfer(proof, root, input_nullifier, output_commitment)`
+- `withdraw(proof, root, nullifier, amount, recipient_address)`
+- `get_root()`
+- `is_nullifier_spent(nullifier)`
+- `version()`
+
+### `groth16_verifier`
+
+Purpose:
+
+- verify zk-SNARK proofs and public inputs
+
+Suggested methods:
+
+- `verify_deposit(proof, public_inputs)`
+- `verify_transfer(proof, public_inputs)`
+- `verify_withdraw(proof, public_inputs)`
+
+Design note:
+
+The verifier contract should not own business logic. It should only verify proofs and return success or failure to the pool.
 
 ---
 
-## Smart Contract Architecture
+## ZK Circuits
 
-### Contract interaction map
+The MVP should ship only three circuits.
 
-```mermaid
-graph TD
-    USER([User / SDK])
+### `deposit.circom`
 
-    subgraph CoreContracts["Core Contracts"]
-        POOL[pool_contract\nDeposit · Transfer · Withdraw]
-        VERIFIER[groth16_verifier\nOn-chain ZK proof check]
-        ASP[asp_registry\nCompliance Merkle trees]
-    end
+Purpose:
 
-    subgraph FeatureContracts["Feature Contracts"]
-        STREAM[stream_manager\nPrivate streaming]
-        MEMO[memo_vault\nEncrypted memos]
-        CHANNEL[channel_manager\nPayment channels]
-    end
+- prove a note commitment is correctly formed
 
-    subgraph TokenLayer["Token Layer"]
-        WRAPPER[sep41_wrapper\nPublic to Encrypted]
-        TOKEN[SEP-41 Token]
-    end
+Public inputs:
 
-    USER -->|deposit / transfer / withdraw| POOL
-    POOL -->|verify_proof| VERIFIER
-    POOL -->|check_membership| ASP
-    POOL -->|store_memo| MEMO
-    POOL -->|wrap / unwrap| WRAPPER
-    WRAPPER --> TOKEN
+- `commitment`
 
-    USER -->|open_stream / claim_stream| STREAM
-    STREAM -->|verify_proof| VERIFIER
+Private inputs:
 
-    USER -->|open / close / dispute channel| CHANNEL
-    CHANNEL -->|verify_proof| VERIFIER
-    CHANNEL -->|release_funds| POOL
-```
+- `amount`
+- `owner_pubkey`
+- `salt`
 
-### Pool contract state machine
+Core statement:
 
-```mermaid
-stateDiagram-v2
-    [*] --> Unregistered
+- `commitment = Poseidon(amount, owner_pubkey, salt)`
 
-    Unregistered --> Registered : register_pubkey(babyjubjub_pk)
+### `transfer.circom`
 
-    Registered --> HasBalance : deposit(token, amount)
+Purpose:
 
-    HasBalance --> HasBalance : transfer(proof, nullifier, new_commitment)
+- prove the sender owns a valid existing note and creates a valid new note
 
-    HasBalance --> Registered : withdraw(proof, amount)
+Public inputs:
 
-    HasBalance --> Streaming : open_stream(rate_commitment, duration)
+- `root`
+- `input_nullifier`
+- `output_commitment`
 
-    Streaming --> HasBalance : claim_stream(proof, elapsed_time)
-    Streaming --> HasBalance : cancel_stream()
+Private inputs:
 
-    HasBalance --> ChannelOpen : open_channel(counterparty)
-    ChannelOpen --> HasBalance : close_channel(final_proof)
-    ChannelOpen --> Disputed : dispute(stale_state_proof)
-    Disputed --> HasBalance : resolve_dispute()
-```
+- `input_amount`
+- `input_salt`
+- `owner_secret`
+- `merkle_path`
+- `recipient_pubkey`
+- `output_amount`
+- `output_salt`
 
----
+Core statements:
 
-## ZK Circuit Design
+- input note exists under `root`
+- prover owns the input note
+- nullifier is derived correctly
+- output note is formed correctly
+- transfer constraints are satisfied
 
-### Circuit dependency graph
+### `withdraw.circom`
 
-```mermaid
-graph TD
-    subgraph Lib["Library circuits (shared)"]
-        MERKLE[merkle.circom]
-        POSEIDON[poseidon.circom]
-        BJJ[babyjubjub.circom]
-        ELGAMAL[elgamal.circom]
-        NULL[nullifier.circom]
-    end
+Purpose:
 
-    subgraph Main["Main circuits (one per instruction)"]
-        DEP[deposit.circom]
-        TXN[transfer.circom]
-        WDW[withdraw.circom]
-        STR_O[stream_open.circom]
-        STR_C[stream_claim.circom]
-        CH_O[channel_open.circom]
-        CH_U[channel_update.circom]
-    end
+- prove the caller owns a note that can be burned for a public withdrawal
 
-    POSEIDON --> MERKLE
-    POSEIDON --> NULL
-    BJJ --> ELGAMAL
+Public inputs:
 
-    MERKLE --> TXN
-    ELGAMAL --> TXN
-    NULL --> TXN
-    BJJ --> TXN
+- `root`
+- `nullifier`
+- `amount`
+- `recipient_address`
 
-    MERKLE --> DEP
-    POSEIDON --> DEP
-    BJJ --> DEP
+Private inputs:
 
-    MERKLE --> WDW
-    NULL --> WDW
-    BJJ --> WDW
+- `amount`
+- `salt`
+- `owner_secret`
+- `merkle_path`
 
-    POSEIDON --> STR_O
-    ELGAMAL --> STR_O
-    BJJ --> STR_O
+Core statements:
 
-    MERKLE --> STR_C
-    NULL --> STR_C
+- note exists under the provided root
+- prover owns the note
+- nullifier is correct
+- withdrawal amount matches the note
 
-    POSEIDON --> CH_O
-    BJJ --> CH_O
+### MVP implementation choice
 
-    MERKLE --> CH_U
-    NULL --> CH_U
-    ELGAMAL --> CH_U
-```
+There are two valid transfer designs:
 
-### Transfer circuit — what gets proven
+- `v1.0-alpha`: full-note transfer only, no change note
+- `v1.0`: one input note and two output notes, one for recipient and one for change
 
-```mermaid
-flowchart LR
-    subgraph Private["Private inputs (never revealed)"]
-        SK[sender secret key]
-        AMT[transfer amount]
-        BBAL[sender balance]
-        SALT[randomness salt]
-    end
-
-    subgraph Public["Public inputs (on-chain visible)"]
-        ROOT[Merkle root]
-        NUL[nullifier hash]
-        NEW_C[new commitment]
-        REC_PK[recipient pubkey]
-    end
-
-    subgraph Constraints["Circuit constraints"]
-        C1[balance is gte amount]
-        C2[nullifier = Poseidon of sk and commitment]
-        C3[commitment is in Merkle tree]
-        C4[new_commitment = Poseidon of amount salt rec_pk]
-        C5[ElGamal encryption correct]
-    end
-
-    SK & BBAL & AMT & SALT --> C1
-    SK & SALT --> C2
-    ROOT --> C3
-    AMT & SALT & REC_PK --> C4
-    AMT & REC_PK & SALT --> C5
-
-    C1 & C2 & C3 & C4 & C5 --> PROOF([Groth16 proof submitted on-chain])
-```
+If the goal is the fastest protocol validation, start with full-note transfer first and add change handling immediately after the proof flow is stable.
 
 ---
 
-## Transaction Flows
+## SDK Surface
 
-### Full deposit → transfer → withdraw
+The SDK should expose a minimal, explicit API.
 
-```mermaid
-sequenceDiagram
-    actor Alice
-    actor Bob
-    participant SDK as TypeScript SDK
-    participant WASM as Circom WASM
-    participant POOL as pool_contract
-    participant VERIFIER as groth16_verifier
-    participant LEDGER as Stellar Ledger
+### Client setup
 
-    Note over Alice,LEDGER: DEPOSIT
+- `new StellarEncryptedPay(config)`
+- `generatePrivacyKeypair()`
+- `getPoolRoot()`
+- `syncNotes()`
 
-    Alice->>SDK: deposit(token=USDC, amount=100)
-    SDK->>SDK: commitment C_A = Poseidon(amount, salt, pk_A)
-    SDK->>POOL: invoke deposit(C_A, token, amount)
-    POOL->>LEDGER: lock 100 USDC
-    POOL->>LEDGER: store C_A in Merkle tree
-    LEDGER-->>Alice: confirmed
+### Deposit flow
 
-    Note over Alice,LEDGER: PRIVATE TRANSFER
+- `buildDeposit(params)`
+- `proveDeposit(params)`
+- `submitDeposit(params)`
+- `deposit(params)`
 
-    Alice->>SDK: transfer(to=Bob, amount=40, memo="Invoice 2024")
-    SDK->>WASM: generate_proof(sk_A, balance=100, amount=40, pk_B)
-    WASM-->>SDK: proof, nullifier N_A, commitment C_B
-    SDK->>SDK: encrypt_memo("Invoice 2024", pk_B)
-    SDK->>POOL: invoke transfer(proof, N_A, C_A, C_B, encrypted_memo)
-    POOL->>VERIFIER: verify_proof(proof, root, N_A, C_B)
-    VERIFIER->>VERIFIER: BN254 pairing check
-    VERIFIER-->>POOL: valid
-    POOL->>LEDGER: mark N_A spent
-    POOL->>LEDGER: store C_B
-    POOL->>LEDGER: store encrypted_memo
-    LEDGER-->>Alice: confirmed — no amounts visible
-
-    Note over Alice,LEDGER: WITHDRAW
-
-    Bob->>SDK: withdraw(commitment=C_B, amount=40)
-    SDK->>WASM: generate_proof(sk_B, C_B, amount=40)
-    WASM-->>SDK: proof, nullifier N_B
-    SDK->>POOL: invoke withdraw(proof, N_B, C_B, amount=40)
-    POOL->>VERIFIER: verify_proof
-    VERIFIER-->>POOL: valid
-    POOL->>LEDGER: release 40 USDC to Bob
-    Bob->>SDK: decrypt_memo(C_B, sk_B)
-    SDK-->>Bob: "Invoice 2024"
-```
-
----
-
-## Private Payment Channels
-
-The most architecturally original feature. Two parties maintain an off-chain payment relationship where the running balance is a ZK commitment — only the final settlement hits the chain.
-
-### Channel lifecycle
-
-```mermaid
-stateDiagram-v2
-    [*] --> Proposed : Alice calls open_channel
-
-    Proposed --> Open : Bob co-signs\nFunds locked on-chain
-
-    Open --> Open : Off-chain state updates\nsigned ZK proofs exchanged peer-to-peer\nzero on-chain footprint
-
-    Open --> Closing : close_channel(final_state_proof)
-
-    Closing --> Closed : Cooperative close\nboth parties sign\nfunds released instantly
-
-    Open --> Disputed : dispute(stale_state, proof)
-
-    Disputed --> Disputed : Counterparty submits\nnewer state during challenge period
-
-    Disputed --> Closed : Challenge period expires\nlatest valid state enforced
-
-    Closed --> [*] : Encrypted balances returned to pool
-```
-
-### Off-chain state update protocol
-
-```mermaid
-sequenceDiagram
-    actor Alice
-    actor Bob
-    participant CH as channel_manager
-    participant VERIFIER as groth16_verifier
-
-    Note over Alice,Bob: Channel open — all updates are peer-to-peer, no chain activity
-
-    loop Each payment (unlimited frequency)
-        Alice->>Alice: compute new_state (balance_A minus amount, balance_B plus amount)
-        Alice->>Alice: generate ZK proof of valid transition
-        Alice->>Bob: new_state_commitment + proof + Alice_signature
-        Bob->>Bob: verify proof locally via WASM
-        Bob->>Alice: Bob_signature on new_state
-        Note over Alice,Bob: Both hold co-signed state N+1
-    end
-
-    Note over Alice,VERIFIER: COOPERATIVE CLOSE
-
-    Alice->>Bob: propose_close(final_state)
-    Bob->>Alice: co-sign final_state
-    Alice->>CH: close_channel(final_state, proof, both_signatures)
-    CH->>VERIFIER: verify_proof
-    VERIFIER-->>CH: valid
-    CH->>CH: release funds to encrypted pool balances
-```
-
----
-
-## Private Streaming Payments
-
-```mermaid
-sequenceDiagram
-    actor Employer
-    actor Employee
-    participant SDK
-    participant WASM
-    participant STREAM as stream_manager
-    participant VERIFIER as groth16_verifier
-    participant POOL as pool_contract
-
-    Note over Employer,POOL: OPEN STREAM
-
-    Employer->>SDK: open_stream(to=Employee, rate=0.001 XLM/sec, duration=30days)
-    SDK->>SDK: rate_commitment = Poseidon(rate, salt, pk_employee)
-    SDK->>SDK: lock_amount = rate x duration
-    SDK->>STREAM: open_stream(rate_commitment, lock_amount, pk_employee)
-    STREAM->>POOL: lock(lock_amount)
-    STREAM->>STREAM: store stream_note
-
-    Note over Employer,POOL: EMPLOYEE CLAIMS VESTED AMOUNT
-
-    Employee->>SDK: claim_stream(stream_note, claim_amount=86.4 XLM)
-    SDK->>WASM: generate_proof(sk_employee, rate, start_time, now, claim_amount)
-    Note right of WASM: Proves claim_amount is lte rate x elapsed\nProves ownership of stream_note\nReveals nothing else
-    WASM-->>SDK: proof, nullifier
-    SDK->>STREAM: claim(proof, nullifier, claim_amount)
-    STREAM->>VERIFIER: verify_proof
-    VERIFIER-->>STREAM: valid
-    STREAM->>POOL: move claim_amount to employee encrypted balance
-```
-
----
-
-## Dependencies
-
-### Rust workspace `Cargo.toml`
-
-```toml
-[workspace]
-members = [
-    "contracts/pool_contract",
-    "contracts/groth16_verifier",
-    "contracts/asp_registry",
-    "contracts/stream_manager",
-    "contracts/memo_vault",
-    "contracts/channel_manager",
-]
-
-[workspace.dependencies]
-soroban-sdk       = { version = "21.0.0", features = ["testutils"] }
-soroban-token-sdk = "21.0.0"
-serde             = { version = "1.0", default-features = false, features = ["derive"] }
-serde_json        = { version = "1.0", default-features = false }
-sha2              = { version = "0.10", default-features = false }
-ark-bn254         = { version = "0.4", default-features = false }
-ark-groth16       = { version = "0.4", default-features = false }
-ark-serialize     = { version = "0.4", default-features = false }
-```
-
-### Root `package.json`
-
-```json
-{
-  "name": "stellar-encrypted-pay",
-  "workspaces": ["sdk", "frontend"],
-  "devDependencies": {
-    "circom": "^2.1.8",
-    "snarkjs": "^0.7.4",
-    "typescript": "^5.3.0",
-    "ts-node": "^10.9.0",
-    "vitest": "^1.0.0"
-  },
-  "dependencies": {
-    "@stellar/stellar-sdk": "^12.0.0",
-    "@stellar/stellar-base": "^12.0.0",
-    "ffjavascript": "^0.3.0",
-    "circomlibjs": "^0.1.7",
-    "big.js": "^6.2.1"
-  }
-}
-```
-
-### System tools
-
-| Tool | Version | Purpose | Install |
-|---|---|---|---|
-| Rust | ≥ 1.75.0 | Soroban contract compilation | `rustup update` |
-| Soroban CLI | ≥ 21.0.0 | Contract deploy and invoke | `cargo install --locked soroban-cli` |
-| Node.js | ≥ 20.0.0 | SDK and circuit toolchain | [nodejs.org](https://nodejs.org) |
-| npm | ≥ 10.0.0 | Package management | bundled with Node |
-| circom | ≥ 2.1.8 | ZK circuit compiler | `npm install -g circom` |
-| snarkjs | ≥ 0.7.4 | Proof generation and setup | `npm install -g snarkjs` |
-| circom2soroban | latest | Convert circuits to Soroban Rust | `cargo install circom2soroban` |
-
----
-
-## Environment Setup
-
-### 1. Rust and Soroban CLI
-
-```bash
-# Install Rust
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source $HOME/.cargo/env
-
-# Add the wasm32 target (required for Soroban contract compilation)
-rustup target add wasm32-unknown-unknown
-
-# Install Soroban CLI
-cargo install --locked soroban-cli
-
-# Verify
-soroban --version
-```
-
-### 2. Node.js toolchain
-
-```bash
-# Install Node.js via nvm (recommended)
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
-nvm install 20
-nvm use 20
-
-# Install global ZK tools
-npm install -g circom snarkjs
-
-# Verify
-circom --version
-snarkjs --version
-```
-
-### 3. circom2soroban
-
-```bash
-# Install the SDF circuit bridge tool
-cargo install circom2soroban
-
-# Verify
-circom2soroban --help
-```
-
-### 4. Environment variables
-
-Copy `.env.example` to `.env` and fill in your values:
-
-```bash
-cp .env.example .env
-```
-
-```env
-# .env
-
-# Stellar network
-STELLAR_NETWORK=testnet
-STELLAR_RPC_URL=https://soroban-testnet.stellar.org
-STELLAR_NETWORK_PASSPHRASE="Test SDF Network ; September 2015"
-
-# For mainnet use:
-# STELLAR_RPC_URL=https://soroban-mainnet.stellar.org
-# STELLAR_NETWORK_PASSPHRASE="Public Global Stellar Network ; September 2015"
-
-# Deployer keypair (generate with: soroban keys generate deployer)
-DEPLOYER_SECRET_KEY=S...
-
-# Deployed contract IDs (populated after deploy)
-POOL_CONTRACT_ID=
-VERIFIER_CONTRACT_ID=
-ASP_CONTRACT_ID=
-STREAM_CONTRACT_ID=
-MEMO_VAULT_CONTRACT_ID=
-CHANNEL_CONTRACT_ID=
-
-# Token to wrap (USDC on testnet)
-TOKEN_CONTRACT_ID=CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA
-
-# Powers-of-Tau ceremony file path
-PTAU_FILE=./circuits/setup/pot18_final.ptau
-```
-
----
-
-## Installation
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/your-org/stellar-encrypted-pay.git
-cd stellar-encrypted-pay
-
-# 2. Install all Node.js dependencies (SDK + frontend)
-npm install
-
-# 3. Build the Soroban contracts
-cargo build --release --target wasm32-unknown-unknown
-
-# 4. Download the Powers-of-Tau ceremony file (Groth16 trusted setup)
-#    This is a one-time ~72MB download of a pre-existing ceremony
-mkdir -p circuits/setup
-curl -L https://hermez.s3-eu-west-1.amazonaws.com/powersOfTau28_hez_final_18.ptau \
-     -o circuits/setup/pot18_final.ptau
-
-# 5. Compile all Circom circuits and generate proving keys
-chmod +x scripts/setup/compile_circuits.sh
-./scripts/setup/compile_circuits.sh
-
-# 6. Generate Soroban verifier Rust from circuit outputs
-chmod +x scripts/generate_verifiers.sh
-./scripts/generate_verifiers.sh
-
-# 7. Build the TypeScript SDK
-cd sdk && npm run build && cd ..
-```
-
-### What `compile_circuits.sh` does
-
-```bash
-#!/bin/bash
-# scripts/setup/compile_circuits.sh
-set -e
-
-CIRCUITS=(transfer deposit withdraw stream_open stream_claim channel_open channel_update)
-
-for circuit in "${CIRCUITS[@]}"; do
-  echo "Compiling $circuit..."
-
-  # Compile circuit to R1CS and WASM
-  circom circuits/$circuit/$circuit.circom \
-    --r1cs --wasm --sym \
-    -o circuits/build/$circuit/
-
-  # Generate Groth16 proving and verification keys
-  snarkjs groth16 setup \
-    circuits/build/$circuit/$circuit.r1cs \
-    circuits/setup/pot18_final.ptau \
-    circuits/build/$circuit/${circuit}_final.zkey
-
-  # Export verification key as JSON
-  snarkjs zkey export verificationkey \
-    circuits/build/$circuit/${circuit}_final.zkey \
-    circuits/build/$circuit/verification_key.json
-
-  echo "  $circuit done"
-done
-```
-
-### What `generate_verifiers.sh` does
-
-```bash
-#!/bin/bash
-# scripts/generate_verifiers.sh
-set -e
-
-CIRCUITS=(transfer deposit withdraw stream_open stream_claim channel_open channel_update)
-
-for circuit in "${CIRCUITS[@]}"; do
-  circom2soroban vk circuits/build/$circuit/verification_key.json \
-    > contracts/groth16_verifier/src/vk_${circuit}.rs
-  echo "  vk_${circuit}.rs generated"
-done
-```
-
----
-
-## Running the Project
-
-### Start a local Stellar node
-
-```bash
-# Run Stellar Quickstart with Soroban support
-docker run --rm -it \
-  -p 8000:8000 \
-  --name stellar \
-  stellar/quickstart:latest \
-  --local --enable-soroban-rpc
-
-# Configure Soroban CLI for local
-soroban config network add local \
-  --rpc-url http://localhost:8000/soroban/rpc \
-  --network-passphrase "Standalone Network ; February 2017"
-```
-
-### Deploy contracts
-
-```bash
-# Generate a deployer keypair and fund it
-soroban keys generate deployer --network local
-soroban keys fund deployer --network local
-
-# Deploy all contracts (verifier first — pool depends on it)
-./scripts/deploy/deploy_testnet.sh
-
-# Copy the output contract IDs into your .env file
-```
-
-### Run the SDK in watch mode
-
-```bash
-cd sdk
-npm run dev
-```
-
-### Run the frontend
-
-```bash
-cd frontend
-npm run dev
-# Opens at http://localhost:5173
-```
-
-### Run everything concurrently
-
-```bash
-# From the project root
-npm run dev
-# Starts: Stellar local node + SDK watcher + frontend dev server
-```
-
----
-
-## Testing
-
-### Contract unit tests
-
-```bash
-# All contracts
-cargo test
-
-# Specific contract
-cargo test -p pool_contract
-cargo test -p groth16_verifier
-cargo test -p stream_manager
-cargo test -p channel_manager
-```
-
-### Circuit tests (generate and verify a proof)
-
-```bash
-cd circuits/transfer
-
-# Generate witness
-node generate_witness.js transfer_js/transfer.wasm input.json witness.wtns
-
-# Generate proof
-snarkjs groth16 prove \
-  ../build/transfer/transfer_final.zkey witness.wtns \
-  proof.json public.json
-
-# Verify proof
-snarkjs groth16 verify \
-  ../build/transfer/verification_key.json public.json proof.json
-```
-
-### SDK tests
-
-```bash
-cd sdk
-npm test
-# Runs Vitest — covers key generation, proof building, tx construction
-```
-
-### End-to-end integration tests
-
-```bash
-# Requires local Stellar node running
-npm run test:e2e
-
-# Covers:
-#   deposit → transfer → withdraw cycle
-#   open_stream → claim_stream cycle
-#   open_channel → update states → cooperative close cycle
-#   dispute → challenge period → resolve cycle
-```
-
----
-
-## Deployment
-
-### Testnet
-
-```bash
-# Fund deployer via Friendbot
-soroban keys fund deployer --network testnet
-
-# Deploy
-./scripts/deploy/deploy_testnet.sh
-
-# Verify pool is live
-soroban contract invoke \
-  --id $POOL_CONTRACT_ID \
-  --network testnet \
-  -- version
-```
-
-### Mainnet
-
-```bash
-# Protocol 25 is live on Mainnet since January 22, 2026
-# Ensure deployer has sufficient XLM for fees
-# Run a formal security audit of all contracts and circuits first
-
-./scripts/deploy/deploy_mainnet.sh
-```
-
----
-
-## SDK Usage
-
-### Initialise
+Suggested shape:
 
 ```typescript
-import { StellarEncryptedPay } from "@stellar-encrypted-pay/sdk";
-
-const sep = new StellarEncryptedPay({
-  network: "testnet",
-  poolContractId: process.env.POOL_CONTRACT_ID,
-  verifierContractId: process.env.VERIFIER_CONTRACT_ID,
-  streamContractId: process.env.STREAM_CONTRACT_ID,
-  channelContractId: process.env.CHANNEL_CONTRACT_ID,
-});
-
-// Generate a privacy keypair (separate from your Stellar keypair)
-const privacyKey = await sep.keys.generate();
-
-// Register your public key on-chain (one-time per wallet)
-await sep.keys.register(stellarKeypair, privacyKey.publicKey);
-```
-
-### Deposit
-
-```typescript
-const receipt = await sep.deposit({
-  tokenId: "CBIELTK6...",
+await sep.deposit({
   amount: "100",
-  senderKeypair: stellarKeypair,
-  privacyKey,
+  recipientPrivacyPubKey,
+  senderKeypair,
 });
-// receipt.commitment — your encrypted balance handle
 ```
 
-### Private transfer with encrypted memo
+### Transfer flow
+
+- `buildTransfer(params)`
+- `proveTransfer(params)`
+- `submitTransfer(params)`
+- `transfer(params)`
+
+Suggested shape:
 
 ```typescript
 await sep.transfer({
-  to: recipientPublicKey,
-  amount: "40",
-  memo: "Invoice #2024-Q1",   // encrypted — only recipient can read
-  commitment: receipt.commitment,
-  privacyKey,
-  senderKeypair: stellarKeypair,
+  inputNote,
+  senderPrivacySecret,
+  recipientPrivacyPubKey,
 });
 ```
 
-### Open a payment stream
+### Withdraw flow
+
+- `buildWithdraw(params)`
+- `proveWithdraw(params)`
+- `submitWithdraw(params)`
+- `withdraw(params)`
+
+Suggested shape:
 
 ```typescript
-// Employer streams salary at 0.001 XLM per second for 30 days
-const stream = await sep.stream.open({
-  to: employeePrivacyKey,
-  ratePerSecond: "0.001",
-  durationSeconds: 30 * 24 * 60 * 60,
-  tokenId: "CBIELTK6...",
-  senderKeypair: stellarKeypair,
-  privacyKey,
-});
-
-// Employee claims vested amount at any time
-await sep.stream.claim({
-  streamNote: stream.note,
-  privacyKey: employeePrivacyKey,
-  recipientKeypair: employeeStellarKeypair,
+await sep.withdraw({
+  note,
+  ownerPrivacySecret,
+  recipientStellarAddress,
 });
 ```
 
-### Open a private payment channel
+### Read and sync helpers
 
-```typescript
-// Open a channel with a business counterparty
-const channel = await sep.channel.open({
-  counterpartyPublicKey: partnerPrivacyKey,
-  myDeposit: "1000",
-  counterpartyDeposit: "1000",
-  tokenId: "CBIELTK6...",
-  myKeypair: stellarKeypair,
-  privacyKey,
-});
+- `getNullifierStatus(nullifier)`
+- `getCommitmentByIndex(index)`
+- `listLocalNotes()`
+- `importNote(note)`
 
-// Make payments off-chain — zero on-chain footprint
-const updatedState = await sep.channel.update({
-  channel,
-  payAmount: "15",
-  privacyKey,
-});
+Design note:
 
-// Cooperatively close — one on-chain transaction settles everything
-await sep.channel.close({
-  channel,
-  finalState: updatedState,
-  myKeypair: stellarKeypair,
-  privacyKey,
-});
-```
+Wallet sync is a first-class requirement, not an afterthought. Private payments fail in practice if users cannot reliably discover, store, and recover notes.
 
 ---
 
-## Feature Roadmap
+## Target Repository Structure
 
-```mermaid
-gantt
-    title Stellar-EncryptedPay — Development Roadmap
-    dateFormat  YYYY-MM
-    section v1.0 Core Protocol
-    Pool contract deposit transfer withdraw   :2026-04, 6w
-    Groth16 verifier contract                 :2026-04, 4w
-    SEP-41 wrapper wrap and unwrap            :2026-05, 3w
-    Encrypted memos                           :2026-05, 3w
-    Selective disclosure proofs               :2026-05, 3w
-    TypeScript SDK v1                         :2026-05, 5w
-    Testnet deployment and audit              :2026-06, 3w
+This is the target scaffold for the first implementation phase.
 
-    section v1.1 Differentiation
-    Private streaming payments                :2026-07, 5w
-    Stealth address system                    :2026-07, 4w
-    Encrypted escrow with time-locks          :2026-08, 4w
-    Private invoices and payment requests     :2026-08, 3w
-    Developer docs and SDK v1.1 release       :2026-09, 2w
-
-    section v1.2 Vertical Products
-    Private payroll module                    :2026-10, 4w
-    Proof-of-payment NFT receipts             :2026-10, 3w
-    Scheduled recurring transfers             :2026-11, 3w
-    Private split payments                    :2026-11, 3w
-
-    section v2.0 Infrastructure
-    Private payment channels                  :2026-12, 8w
-    ZK identity and credential layer          :2027-02, 8w
-    Private DEX dark pool                     :2027-04, 10w
-    Cross-chain private bridge                :2027-06, 10w
+```text
+stellar-encrypted-pay/
+├── contracts/
+│   ├── pool_contract/
+│   └── groth16_verifier/
+├── circuits/
+│   ├── deposit/
+│   ├── transfer/
+│   ├── withdraw/
+│   └── lib/
+├── sdk/
+├── frontend/
+├── tests/
+│   ├── contracts/
+│   ├── circuits/
+│   └── integration/
+├── scripts/
+│   ├── setup/
+│   └── deploy/
+└── docs/
+    └── protocol/
 ```
+
+This layout exists in the repository today. The Soroban packages are intentionally small stubs (`version()` only) so you can validate your toolchain before implementing pool logic.
+
+Notably absent in `v1.0`:
+
+- `stream_manager`
+- `channel_manager`
+- `memo_vault`
+- `asp_registry`
+
+Those belong to later phases, not the initial build.
+
+---
+
+## Build Plan
+
+The project should be implemented in this order.
+
+### Phase 0: Protocol spec
+
+Deliverables:
+
+- note format
+- nullifier derivation
+- Merkle tree model
+- circuit public/private inputs
+- explicit privacy guarantees
+- threat model
+
+Exit criteria:
+
+- no unresolved protocol ambiguity
+
+### Phase 1: Circuits
+
+Deliverables:
+
+- `deposit.circom`
+- `transfer.circom`
+- `withdraw.circom`
+- local proving scripts
+- sample witness fixtures
+
+Exit criteria:
+
+- valid proofs generate and verify locally
+
+### Phase 2: Verifier contract
+
+Deliverables:
+
+- `groth16_verifier`
+- embedded verification keys
+- proof input validation
+
+Exit criteria:
+
+- valid proofs pass on-chain and invalid proofs fail
+
+### Phase 3: Pool contract
+
+Deliverables:
+
+- pool initialization
+- deposit
+- transfer
+- withdraw
+- root updates
+- nullifier tracking
+
+Exit criteria:
+
+- contract invariants hold in tests
+
+### Phase 4: SDK
+
+Deliverables:
+
+- proof wrappers
+- transaction builders
+- local note storage
+- sync helpers
+
+Exit criteria:
+
+- a developer can execute the full flow through SDK only
+
+### Phase 5: Minimal frontend
+
+Deliverables:
+
+- `Deposit` page
+- `Transfer` page
+- `Withdraw` page
+- local note inspector
+
+Exit criteria:
+
+- a tester can complete the MVP flow without using the CLI
+
+### Phase 6: Testnet hardening
+
+Deliverables:
+
+- environment config
+- deployment scripts
+- repeatable testnet flow
+- failure-path integration tests
+
+Exit criteria:
+
+- stable end-to-end demo on testnet
+
+---
+
+## Testing Strategy
+
+### Contract tests
+
+Must cover:
+
+- deposit inserts a valid commitment
+- invalid proof is rejected
+- reused nullifier is rejected
+- withdrawal releases funds once
+- stale or invalid root is rejected
+
+### Circuit tests
+
+Must cover:
+
+- valid witness generation
+- valid proof verification
+- invalid Merkle path failure
+- invalid owner secret failure
+- invalid nullifier failure
+- amount mismatch failure
+
+### Integration tests
+
+At minimum:
+
+- Alice deposits
+- Alice transfers privately to Bob
+- Bob withdraws
+
+Failure-path tests:
+
+- replay attack with reused nullifier
+- forged proof
+- withdrawal against stale root
+
+---
+
+## Deployment Plan
+
+### Local development
+
+Required tools:
+
+- Rust
+- Soroban CLI
+- Node.js
+- `circom`
+- `snarkjs`
+- `circom2soroban`
+
+Basic flow:
+
+1. install dependencies
+2. compile circuits
+3. generate proving and verification artifacts
+4. build contracts
+5. start local Stellar node
+6. deploy verifier first, then pool
+7. run SDK and frontend against local network
+
+### Testnet
+
+Testnet is the first public proving ground for the protocol. Mainnet should not be considered until:
+
+- the protocol spec is stable
+- all core invariants are tested
+- note sync and recovery are documented
+- an external audit has been completed
+
+---
+
+## Future Roadmap
+
+The roadmap is intentionally phased by dependency and risk. Everything below **after `v1.0`** is a planned direction, not a commitment or shipping order until each phase is specified in `docs/protocol` and backed by tests.
+
+### `v1.0` Core private pool (current focus)
+
+Ship first:
+
+- single-asset pool per deployment
+- `deposit`, private `transfer`, `withdraw`
+- `pool_contract` + `groth16_verifier`
+- Circom circuits: `deposit`, `transfer`, `withdraw`
+- TypeScript SDK: proof generation, tx construction, basic note handling
+- minimal frontend (three flows only)
+- local + testnet deployment scripts
+- contract, circuit, and end-to-end tests for the happy path and main failure modes
+
+---
+
+### `v1.1` Usability and protocol extensions
+
+Goal: make the private pool practical for real wallets without changing the core trust model.
+
+Planned additions:
+
+- **Change notes**: one input, two outputs (recipient + change) so users do not need exact note denominations
+- **Encrypted memos / invoices**: optional ciphertext or commitment + off-chain payload; fixed-size payloads where possible to limit metadata leakage
+- **Note discovery and sync**: indexer or light-client strategy, spent/unspent tracking, reorg handling
+- **Backup and recovery**: export/import of note material; documented key hierarchy (Stellar keys vs privacy keys)
+- **Developer experience**: documented public inputs per circuit, local prover scripts, CI for circuits + contracts
+- **Optional `memo_vault`-style module**: separate contract or module for memo storage so the pool stays focused on value movement
+
+---
+
+### `v1.2` Policy, compliance, and multi-asset preparation
+
+Goal: optional regulated modes and safer asset handling **without** baking policy into the minimal pool path by default.
+
+Planned additions:
+
+- **Selective disclosure**: prove properties (for example bounds) without revealing exact amounts or full note details
+- **`asp_registry` or equivalent**: membership / exclusion Merkle checks as an **optional** gate, versioned policies
+- **Regulated deployment profile**: documented configuration where pools require compliance proofs before transfer or withdraw
+- **SEP-41 multi-asset strategy**: either one pool per asset with clear addressing, or a audited wrapper pattern; explicit decimal and asset-id handling in circuits
+- **Key registration / rotation flows** if the protocol requires on-chain privacy key metadata
+
+---
+
+### `v2.0` Advanced payment modes
+
+Goal: product differentiators that depend on a stable `v1.x` pool and strong metadata analysis.
+
+Planned additions:
+
+- **Private recurring / scheduled payments**: time-based or counter-based commitments with clear privacy limits (timing may still leak coarse patterns)
+- **`stream_manager` + circuits** (`stream_open`, `stream_claim`): salary-like streams with ZK-backed claims
+- **Stealth or one-time receiving**: harder linking of deposits to recipients where the design allows it on Stellar
+- **Encrypted escrow and time-locks**: release conditions proven in ZK or hybrid on-chain + ZK
+
+---
+
+### `v2.1` Private payment channels
+
+Goal: high-frequency, low-footprint payments between two parties with on-chain open/close/dispute only.
+
+Planned additions:
+
+- **`channel_manager` + circuits** (`channel_open`, `channel_update`): bilateral channels, challenge windows, dispute resolution
+- **Off-chain state + co-signed updates**: peer-to-peer proof exchange; optional watchtower / third-party monitoring story in docs
+- **Settlement into the pool**: channels settle back into private notes or withdrawals as designed
+
+---
+
+### Longer-term vision (post `v2.x`, exploratory)
+
+These items appeared in earlier product thinking and may never ship as described; they are **candidates** for research or far-future versions if the core protocol succeeds.
+
+- **Private DEX / dark pool**-style liquidity (heavy ZK + MEV and liquidity design)
+- **Cross-chain private bridge** (trust assumptions and bridge security dominate the design)
+- **ZK identity / credentials layer** (sybil resistance, KYC-minimized proofs)
+- **Vertical products**: private payroll modules, payment requests / invoices as first-class UX, split payments
+- **Attestations or receipts** (for example NFT or verifiable credential style proof-of-payment), if there is a clear privacy story
+
+Each of these needs its own threat model, economics, and audit plan before it belongs in a versioned roadmap.
+
+---
+
+### Why future work is split this way
+
+Advanced features multiply attack surface (replay, state machine bugs, metadata leakage, liveness failures). They are grouped so that:
+
+1. **Pool correctness** ships first (`v1.0`)
+2. **Usability and memos** follow (`v1.1`)
+3. **Policy and multi-asset** are opt-in layers (`v1.2`)
+4. **Streams and channels** need mature sync and dispute semantics (`v2.0` / `v2.1`)
+5. **Ecosystem-scale ideas** stay explicitly exploratory until grounded in shipped primitives
 
 ---
 
 ## Contributing
 
-Contributions are welcome. Please open an issue before starting significant work.
+Contributions are welcome, but protocol changes should begin with design discussion before implementation.
 
-```bash
-# Fork and clone
-git clone https://github.com/your-org/stellar-encrypted-pay.git
+Recommended order for contributors:
 
-# Create a feature branch
-git checkout -b feature/your-feature-name
+1. clarify the protocol behavior in `docs/protocol`
+2. add or update circuit tests
+3. add or update contract tests
+4. add or update SDK integration tests
 
-# Run tests before committing
-cargo test && npm test
+Engineering standards:
 
-# Submit a PR against main
-```
-
-Code standards: Rust contracts must pass `cargo clippy` with no warnings. TypeScript must pass `tsc --noEmit`. All new ZK circuits must include both unit tests and a documented sample input/output.
+- Rust contracts should pass `cargo test` and `cargo clippy`
+- TypeScript should pass `tsc --noEmit`
+- new circuits must include sample inputs and expected outputs
+- new protocol claims must document privacy assumptions and failure cases
 
 ---
 
@@ -1159,8 +793,7 @@ MIT — see [LICENSE](LICENSE)
 
 ---
 
-> Built on Stellar Protocol 25 (X-Ray). Inspired by Avalanche eERC and Stellar Private Payments (SPP).
-> Leverages open-source work from the Stellar Development Foundation, iden3/circom, and the Nethermind ZK team.
+> Built for Stellar Protocol 25 and Soroban. Inspired by the broader category of shielded payment systems, but intentionally scoped around a smaller and more credible MVP first.
 
 
 

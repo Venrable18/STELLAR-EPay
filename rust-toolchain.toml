@@ -1,0 +1,6 @@
+[toolchain]
+# Newer crates in the Soroban dependency graph may require a recent Cargo that understands
+# manifests using Rust 2024. Bump this if `cargo fetch` fails on your machine.
+channel = "1.88.0"
+targets = ["wasm32-unknown-unknown"]
+profile = "minimal"

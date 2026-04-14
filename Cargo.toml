@@ -1,0 +1,10 @@
+[workspace]
+resolver = "2"
+members = [
+    "contracts/pool_contract",
+    "contracts/groth16_verifier",
+]
+
+[workspace.dependencies]
+# Pin to a 21.x line for broader toolchain compatibility (see soroban-cli release pairing).
+soroban-sdk = { version = "21.7.6" }
