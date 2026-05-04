@@ -308,6 +308,27 @@ impl PoolContract {
         (leaf_index, new_root)
     }
 
+    /// Mark nullifier as spent (internal utility).
+    pub fn add_nullifier(env: Env, nullifier: Bytes) {
+        if !env.storage().persistent().has(&KEY_TOKEN_ID) {
+            panic!("Pool not initialized");
+        }
+
+        let mut spent_nullifiers: Vec<Bytes> = env.storage().persistent().get(&KEY_SPENT_NULLIFIERS).unwrap();
+        spent_nullifiers.push_back(nullifier);
+        env.storage().persistent().set(&KEY_SPENT_NULLIFIERS, &spent_nullifiers);
+    }
+
+    /// Retrieve commitment at specific tree index.
+    pub fn get_commitment_by_index(env: Env, index: u64) -> Option<Bytes> {
+        if !env.storage().persistent().has(&KEY_TOKEN_ID) {
+            panic!("Pool not initialized");
+        }
+
+        let tree_nodes: Map<u64, Bytes> = env.storage().persistent().get(&KEY_TREE_NODES).unwrap();
+        tree_nodes.get(index)
+    }
+
     /// Protocol / build identifier for smoke tests and deployments.
     pub fn version(_env: Env) -> u32 {
         1
