@@ -329,6 +329,69 @@ impl PoolContract {
         tree_nodes.get(index)
     }
 
+    /// Return total assets held in pool.
+    pub fn get_pool_balance(env: Env) -> u128 {
+        if !env.storage().persistent().has(&KEY_TOKEN_ID) {
+            panic!("Pool not initialized");
+        }
+
+        env.storage().persistent().get(&KEY_POOL_BALANCE).unwrap()
+    }
+
+    /// Validate proof input structure before verification.
+    pub fn validate_proof_inputs(env: Env, proof_type: u32, public_inputs: Vec<Bytes>) -> bool {
+        // proof_type: 0 = Deposit, 1 = Transfer, 2 = Withdraw
+        
+        match proof_type {
+            0 => {
+                // Deposit proof requires 1 input: [commitment]
+                if public_inputs.len() != 1 {
+                    return false;
+                }
+                if public_inputs.get(0).unwrap().len() != 32 {
+                    return false;
+                }
+                true
+            }
+            1 => {
+                // Transfer proof requires 3 inputs: [root, input_nullifier, output_commitment]
+                if public_inputs.len() != 3 {
+                    return false;
+                }
+                if public_inputs.get(0).unwrap().len() != 32 {
+                    return false;
+                }
+                if public_inputs.get(1).unwrap().len() != 32 {
+                    return false;
+                }
+                if public_inputs.get(2).unwrap().len() != 32 {
+                    return false;
+                }
+                true
+            }
+            2 => {
+                // Withdraw proof requires 4 inputs: [root, nullifier, amount, recipient_address]
+                if public_inputs.len() != 4 {
+                    return false;
+                }
+                if public_inputs.get(0).unwrap().len() != 32 {
+                    return false;
+                }
+                if public_inputs.get(1).unwrap().len() != 32 {
+                    return false;
+                }
+                if public_inputs.get(2).unwrap().len() != 8 {
+                    return false;
+                }
+                if public_inputs.get(3).unwrap().len() != 32 {
+                    return false;
+                }
+                true
+            }
+            _ => false,
+        }
+    }
+
     /// Protocol / build identifier for smoke tests and deployments.
     pub fn version(_env: Env) -> u32 {
         1
