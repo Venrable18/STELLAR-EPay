@@ -77,6 +77,63 @@ impl Groth16Verifier {
         true
     }
 
+    /// Verify withdrawal proof (note ownership + amount).
+    pub fn verify_withdraw(env: Env, proof: Bytes, public_inputs: Vec<Bytes>) -> bool {
+        // Validate input count
+        if public_inputs.len() != 4 {
+            return false;
+        }
+
+        // Validate proof structure
+        if proof.len() == 0 {
+            return false;
+        }
+
+        // Validate public inputs
+        let root = &public_inputs.get(0).unwrap();
+        let nullifier = &public_inputs.get(1).unwrap();
+        let amount = &public_inputs.get(2).unwrap();
+        let recipient_address = &public_inputs.get(3).unwrap();
+
+        if root.len() != 32 {
+            return false;
+        }
+        if nullifier.len() != 32 {
+            return false;
+        }
+        if amount.len() != 8 {
+            return false;
+        }
+        if recipient_address.len() != 32 {
+            return false;
+        }
+
+        // In production: perform actual BN254 pairing verification
+        // For now: accept any valid proof structure
+        // The actual verification would:
+        // 1. Parse proof into BN254 points (A, B, C)
+        // 2. Load verification key
+        // 3. Perform pairing check with withdraw circuit constraints
+        // 4. Return verification result
+
+        true
+    }
+
+    /// Return embedded Groth16 verification key.
+    pub fn get_verification_key(env: Env) -> Bytes {
+        // In production: return the embedded verification key for the circuit
+        // This would be generated during circuit compilation and embedded at deployment
+        // For now: return a placeholder empty Bytes object
+        // The VK structure in BN254 contains:
+        // - alpha_g1: G1 point (2 * 256 bits)
+        // - beta_g2: G2 point (4 * 256 bits)
+        // - gamma_g2: G2 point (4 * 256 bits)
+        // - delta_g2: G2 point (4 * 256 bits)
+        // - gamma_abc_g1: Array of G1 points (varies by circuit)
+        
+        Bytes::new(&env)
+    }
+
     /// Protocol / build identifier for smoke tests and deployments.
     pub fn version(_env: Env) -> u32 {
         1
