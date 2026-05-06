@@ -1,0 +1,27 @@
+.text-area {
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  font-family: "Monaco", "Courier New", monospace;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  width: 100%;
+  resize: vertical;
+  min-height: 80px;
+}
+
+.text-area:focus {
+  outline: none;
+  border-color: #0f6e56;
+  box-shadow: 0 0 0 3px rgba(15, 110, 86, 0.1);
+}
+
+.text-area:disabled {
+  background-color: #f5f5f5;
+  color: #999;
+  cursor: not-allowed;
+}
+
+.text-area::placeholder {
+  color: #bbb;
+}
