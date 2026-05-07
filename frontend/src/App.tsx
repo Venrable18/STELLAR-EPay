@@ -4,6 +4,7 @@ import { TransferPage } from "./pages/TransferPage";
 import { WithdrawPage } from "./pages/WithdrawPage";
 import { NotesPage } from "./pages/NotesPage";
 import { Navigation } from "./components/Navigation";
+import { WalletHeader } from "./components/WalletHeader";
 import "./App.css";
 
 type PageType = "deposit" | "transfer" | "withdraw" | "notes";
@@ -32,6 +33,8 @@ export function App() {
         <h1>Stellar-EncryptedPay</h1>
         <p className="subtitle">Privacy-preserving payments on Stellar</p>
       </header>
+
+      <WalletHeader />
 
       <Navigation currentPage={currentPage} onPageChange={setCurrentPage} />
 
