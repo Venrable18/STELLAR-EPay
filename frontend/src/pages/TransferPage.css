@@ -1,0 +1,233 @@
+.transfer-page {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.page-header {
+  text-align: center;
+}
+
+.page-header h2 {
+  font-size: 1.75rem;
+  margin-bottom: 8px;
+  color: #333;
+}
+
+.page-header p {
+  color: #666;
+  font-size: 1rem;
+}
+
+.transfer-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.transfer-form-card {
+  grid-column: 1;
+}
+
+.transfer-result-card {
+  grid-column: 2;
+  grid-row: 1 / 3;
+}
+
+.available-notes-card {
+  grid-column: 2;
+}
+
+.select-input {
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  width: 100%;
+  background-color: white;
+  cursor: pointer;
+}
+
+.select-input:focus {
+  outline: none;
+  border-color: #0f6e56;
+  box-shadow: 0 0 0 3px rgba(15, 110, 86, 0.1);
+}
+
+.select-input:disabled {
+  background-color: #f5f5f5;
+  color: #999;
+  cursor: not-allowed;
+}
+
+.form-group {
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-group label {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #333;
+}
+
+.form-group small {
+  font-size: 0.8rem;
+  color: #999;
+}
+
+.note-details {
+  background-color: #f9f9f9;
+  padding: 12px;
+  border-radius: 4px;
+  border: 1px solid #eee;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 0.9rem;
+}
+
+.detail-row span {
+  color: #666;
+}
+
+.detail-row strong {
+  color: #333;
+}
+
+.badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 3px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.badge-available {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+.badge-spent {
+  background-color: #ffebee;
+  color: #c62828;
+}
+
+.badge-success {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+.badge-error {
+  background-color: #ffebee;
+  color: #c62828;
+}
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.result-item {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #eee;
+}
+
+.result-item:last-child {
+  margin-bottom: 0;
+  border-bottom: none;
+}
+
+.result-item label {
+  display: block;
+  font-size: 0.85rem;
+  color: #999;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.result-item code {
+  display: block;
+  background-color: #f5f5f5;
+  padding: 8px;
+  border-radius: 4px;
+  font-family: "Monaco", "Courier New", monospace;
+  font-size: 0.85rem;
+  word-break: break-all;
+  color: #333;
+}
+
+.long-hash {
+  word-break: break-word;
+}
+
+.notes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.note-item {
+  background-color: #f9f9f9;
+  padding: 12px;
+  border-radius: 4px;
+  border: 1px solid #eee;
+  transition: background-color 0.2s;
+}
+
+.note-item:hover {
+  background-color: #f5f5f5;
+}
+
+.note-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.note-id {
+  font-size: 0.85rem;
+  color: #666;
+  font-family: "Monaco", "Courier New", monospace;
+  font-weight: 500;
+}
+
+.note-info {
+  display: flex;
+  gap: 8px;
+  font-size: 0.9rem;
+}
+
+.note-amount {
+  color: #0f6e56;
+  font-weight: 600;
+}
+
+@media (max-width: 1024px) {
+  .transfer-container {
+    grid-template-columns: 1fr;
+  }
+
+  .transfer-form-card,
+  .transfer-result-card,
+  .available-notes-card {
+    grid-column: 1;
+  }
+
+  .transfer-result-card {
+    grid-row: auto;
+  }
+}
