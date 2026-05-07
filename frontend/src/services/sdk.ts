@@ -1,3 +1,5 @@
+import { config } from "../config/env";
+
 /**
  * STELLAR-EPay SDK Wrapper
  * 
@@ -67,10 +69,13 @@ export interface Note {
 
 // SDK Service Class
 export class StellarEPaySDK {
-  private contractId: string;
-  private verifierContractId: string;
-  private networkPassphrase: string;
-  private serverUrl: string;
+  // Config stored for Phase 2 integration
+  private readonly _config: {
+    contractId: string;
+    verifierContractId: string;
+    networkPassphrase: string;
+    serverUrl: string;
+  };
 
   constructor(config: {
     contractId: string;
@@ -78,10 +83,14 @@ export class StellarEPaySDK {
     networkPassphrase: string;
     serverUrl: string;
   }) {
-    this.contractId = config.contractId;
-    this.verifierContractId = config.verifierContractId;
-    this.networkPassphrase = config.networkPassphrase;
-    this.serverUrl = config.serverUrl;
+    this._config = config;
+  }
+
+  /**
+   * Get configuration (for Phase 2 integration)
+   */
+  getConfig() {
+    return this._config;
   }
 
   /**
@@ -239,11 +248,10 @@ let sdkInstance: StellarEPaySDK | null = null;
 export function getSDK(): StellarEPaySDK {
   if (!sdkInstance) {
     sdkInstance = new StellarEPaySDK({
-      contractId: process.env.REACT_APP_POOL_CONTRACT_ID || "",
-      verifierContractId: process.env.REACT_APP_VERIFIER_CONTRACT_ID || "",
-      networkPassphrase:
-        process.env.REACT_APP_NETWORK_PASSPHRASE || "Test SDF Network ; September 2015",
-      serverUrl: process.env.REACT_APP_SOROBAN_RPC_URL || "",
+      contractId: config.poolContractId,
+      verifierContractId: config.verifierContractId,
+      networkPassphrase: config.networkPassphrase,
+      serverUrl: config.sorobanRpcUrl,
     });
   }
   return sdkInstance;
