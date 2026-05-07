@@ -6,6 +6,8 @@ import { NotesPage } from "./pages/NotesPage";
 import { Navigation } from "./components/Navigation";
 import { WalletHeader } from "./components/WalletHeader";
 import "./App.css";
+import "./styles/animations.css";
+import "./styles/refinements.css";
 
 type PageType = "deposit" | "transfer" | "withdraw" | "notes";
 
